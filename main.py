@@ -5,10 +5,10 @@ import time  # kvuli delay a pojmenovani souboru
 import matplotlib.pyplot as plt  # kvuli vykreslovani grafu a obrazku
 from matplotlib.animation import FuncAnimation  # funkce obstarávající zobrazení a záznam
 
-
 # -----------------
 # DEFINICE FUNKCÍ
 # ------------------
+
 
 def send_cmd(prikaz):
     # převod hex stringu na byt
@@ -24,10 +24,11 @@ def kamera_raw_nastaveni(kamera):
 
 
 def uprava_snimku(frame):
-    frame = frame.reshape(rows, cols * 2)  # Udela z (512, 640, 2) udela (512, 1280) - nejsou to dva obrzaky vedle sebe, ale na střídačku sloupce
+    # Udela z (512, 640, 2) udela (512, 1280) - nejsou to dva obrzaky vedle sebe, ale na střídačku sloupce
+    frame = frame.reshape(rows, cols * 2)
     frame = frame.astype(np.uint16)  # Convert uint8 elements to uint16 elements
-    frame = (frame[:, 0::2] << 8) + frame[:,
-                                    1::2]  # každej sudej sloupec to znásobí 256 a pak k tomu přičte každej lichej sloupec - výsledek je (512, 640)
+    # každej sudej sloupec to znásobí 256 a pak k tomu přičte každej lichej sloupec - výsledek je (512, 640)
+    frame = (frame[:, 0::2] << 8) + frame[:, 1::2]
     # frame = frame.view(np.int16)  # The data is actually signed 16 bits - view it as int16 (16 bits singed).
     return frame
 
@@ -48,6 +49,7 @@ cas_ms = int((1 / set_fps) * 1000)  # cas v milisekundach pro FuncAnimate
 ser = serial.Serial('/dev/ttyUSB0')
 ser.baudrate = 115200
 
+# TODO: najít tady nějaký možnosti aby se to vzpamatovalo lépe ... furt to nefunguje
 time.sleep(2)  # dvě sekundy aby se všechno vzpamatovalo - hlavně serial
 
 # OVLADANI KAMERY po serial portu
@@ -88,22 +90,21 @@ data, casy, data_bod, i = [], [], [], 0
 
 
 # Define the animation function
+# TODO: udělat opravdovou live_view funkci a tohle předělat na tu správnou záznamovou
 def live_view(index):
     # data z kamery - (512,640,2) má frame
     ret, frame = iray.read()
     # záznam dat a timestampů
     data.append(frame)
     casy.append(time.time())
+    # TODO: potřebuju si ty časy nějak ukládat
 
     # update obrazku pro prvni subplot
     img_obj.set_data(frame[:, :, 0])
 
+    # TODO: tady je potřeba přijít na to proč mám ten shape mismatch
     data_bod.append(frame[256, 320, 0])
     plot_obj.set_data(np.arange(index), data_bod)
-
-    #     # definice dat a update dat pro zobrazeni doplnkovych dat
-    #     center_line = frame[256, :, 0]
-    #     plot_obj.set_data(np.arange(640), center_line)
 
     return img_obj, plot_obj
 
@@ -123,8 +124,8 @@ iray.release()
 data = np.stack(data, axis=0)
 print(data.shape)
 
-fps = data.shape[0] / (timer_pro_fps_konec - timer_pro_fps_start)  # vypocet realnyho fps
-print(fps)
+real_fps = data.shape[0] / (timer_pro_fps_konec - timer_pro_fps_start)  # vypocet realnyho fps
+print(real_fps)
 
 # vyslání příkazu na NUC shutter
 send_cmd('AA 05 01 11 02 01 C4 EB AA')
