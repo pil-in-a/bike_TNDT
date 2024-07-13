@@ -4,8 +4,10 @@ import cv2 as cv  # kvuli kameře - obraz
 import serial  # kvůli posílání hex commandů do kamery
 import numpy as np  # kvuli praci s arrays
 import time  # kvuli delay a pojmenovani souboru
-import matplotlib.pyplot as plt  # kvuli vykreslovani grafu a obrazku
-from matplotlib.animation import FuncAnimation  # funkce obstarávající zobrazení a záznam
+#import matplotlib.pyplot as plt  # kvuli vykreslovani grafu a obrazku
+#from matplotlib.animation import FuncAnimation  # funkce obstarávající zobrazení a záznam
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtCore
 from commands import iray_commands as i_c  # dictionary s hex příkazama
 # další dependency zde je PyQt6 - pip install pyqt6 (pro linux)
 
@@ -43,7 +45,7 @@ def vytvor_filename(zacatek, konec, n):
 device_index = 2  # /dev/videoX
 port = 0  # /dev/ttyUSBX
 cols, rows = 640, 512  # velikost snimku
-set_fps = 15  # nastavena fps pro zaznam
+set_fps = 25  # nastavena fps pro zaznam
 x_watch = 320  # souradnice bodu, kde sleduju hodnotu
 y_watch = 256
 
@@ -51,11 +53,10 @@ y_watch = 256
 ser = serial.Serial(f'/dev/ttyUSB{port}')
 ser.baudrate = 115200
 
-# TODO: najít tady nějaký možnosti aby se to vzpamatovalo lépe ... furt to nefunguje
 time.sleep(2)  # dvě sekundy aby se všechno vzpamatovalo - hlavně serial
 
 # OVLADANI KAMERY po serial portu
-# send_cmd('Auto NUC on')
+send_cmd('Auto NUC off')
 send_cmd('NUC - Shutter')
 send_cmd('DVI - BT.1120')
 send_cmd('PLT - Iron')
@@ -97,64 +98,60 @@ thumbnail = vytvor_thumbnail(iray)
 # nastavení správného raw formátu
 kamera_raw_nastaveni(iray)
 
-# vypocet intervalu pro FuncAnimation
-# je upraven konstantou abych dostal cca FPS, co potřebuju
-cas_ms = int((1 / ((26/16)*set_fps)) * 1000)
-# TODO: přesnější nastavení FPS? ale až po ustálení záznamového loopu
+# vypocet intervalu pro QtTimer
+cas_ms = int((1 / (set_fps) * 1000))
 
-# NASTAVEVNI ZOBRAZENI
-fig_rec, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+# Nastavení zobrazovacího okna pyqtgraph
+app = pg.mkQApp("Zaznam")
+win = pg.GraphicsLayoutWidget(show=True, title="Zaznam dat z kamery", size=(1000,1000))
 
-# Axes pro zobrazeni cam view
-img_obj = ax1.imshow(np.zeros((512, 640), dtype=np.uint8))
-img_obj.set_clim(0, 255)
-ax1.set_title('Meření')
+pg.setConfigOptions(antialias=True)
 
-# Axes pro zobrazeni vybraneho bodu v čase
-plot_obj, = ax2.plot([], [], lw=1)
-ax2.set_xlim(0, 2000)
-ax2.set_ylim(6000, 16000)  # hodnoty jsou stanovený empiricky, kde se tak asi ty hodnoty nacházej
-ax2.set_title(f'Data v bodě ({x_watch},{y_watch})')
+p1 = win.addViewBox()
+p1.setAspectLocked()  # zanechává pixely čtvercové
+p1.invertY()  # obrátí obrázek vzhůru nohma -> správně
 
+img = pg.ImageItem(axisOrder='row-major')  # axis order dává obrázek správně
+img.setColorMap('magma')
+p1.addItem(img)
+
+win.nextRow()
+
+p2 = win.addPlot(title="Updating plot")
+graf = p2.plot(pen='r')
+
+# iniciace dat pro záznam
 data, casy, data_bod = [], [], []
 
 
-def zaznam(index):
-    # data z kamery - (512,640,2) má frame poté, co je kamera nastavená na RAW Y16
+def update():
+    # funkce updatující data pro zobrazení a záznam
     ret, frame = iray.read()
-    # záznam dat a timestampů
     data.append(frame)
     casy.append(time.time())
 
-    # update obrazku pro zobrazeni
-    img_obj.set_data(frame[:, :, 0], cmap='jet')
-
-    # zobrazení dat ve zvoleném bodě, převedená na 16bit
     data_do_grafu = frame[y_watch, x_watch, :].astype('int16')
     data_do_grafu = int(data_do_grafu[0] + (data_do_grafu[1] << 8))
-
-    # update dat pro line chart
     data_bod.append(data_do_grafu)
-    plot_obj.set_data(np.arange(index+2), data_bod)
-    # index + něco je tady kvůli tomu, že data_bod mají v první iteraci už nějakou velikost z nějakýho důvodu
-    # TODO: jak s tim indexem? Možný řešení je z toho vynechat FuncAnimation
+    graf.setData(data_bod)
 
-    return img_obj, plot_obj
-
+    img.setImage(frame[:,:,0])
 
 # Shutter před náběrem
 send_cmd('DVI - LVCMOS')
 send_cmd('DVS - NUC')
 send_cmd('NUC - Shutter')
+send_cmd('Auto NUC off')
 time.sleep(2)  # dvě sekundy prodleva aby shutter nezasáhnul do záznamu
 
-# funkce, ktera se stara o animaci a dostava data z funkce live_view, kterou si to samo spousti
-ani = FuncAnimation(fig_rec, zaznam, frames=2000, interval=cas_ms, blit=False)
-plt.show(block=True)  # zobrazeni dat z iniciovanych subplotu a z funkce ani, block=true je kvuli ukonceni pomoci "q"
+# spouštění funkce update
+timer = QtCore.QTimer()
+timer.timeout.connect(update)
+timer.start(cas_ms)
+
+pg.exec()
 
 iray.release()  # Release the camera
-plt.close(fig_rec)
-
 # ------------------------
 # ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
 # --------------------------
