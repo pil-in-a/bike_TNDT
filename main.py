@@ -9,7 +9,7 @@ from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMainWindow
 from commands import iray_commands as i_c  # dictionary s hex příkazama
-from scipy.io import savemat # pro ukládání matláku
+from scipy.io import savemat  # pro ukládání matláku
 # další dependency zde je PyQt6 - pip install pyqt6 (pro linux)
 
 # -----------------
@@ -22,6 +22,7 @@ class CustomMainWindow(QMainWindow):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Q:  # corrected to `Qt.Key.Key_Q`
             self.close()  # Close the window
+
 
 class Camera:
     # třída Camera, při iniciaci provedfe cv.Videocapture()
@@ -44,8 +45,8 @@ class Camera:
         self.device.release()
 
 
-def create_thumbnail(camera):
-    _, image = camera.read_frame()
+def create_thumbnail(device):
+    _, image = device.read_frame()
     return image
 
 
@@ -53,6 +54,25 @@ def create_filename(start, stop, n):
     fps = str(n / (stop - start))
     filename = f'{time.strftime("%H%M%S")}FPS{fps[0:2]}_{fps[3:6]}'
     return filename, fps
+
+
+def pre_measure_view(device, resize_factor=1.9):
+    cv.namedWindow('live-view', cv.WINDOW_NORMAL)
+    cv.resizeWindow('live-view', 1200, 1000)
+
+    while True:
+        pohoda, frame_live = device.read_frame()
+        if not pohoda:
+            break
+
+        frame_live = cv.resize(frame_live, (int(640 * resize_factor), int(512 * resize_factor)))
+        cv.imshow('live-view', frame_live)
+        key = cv.waitKey(1)
+
+        if key == ord('q'):
+            break
+
+    cv.destroyAllWindows()
 
 
 # KONSTANTY
@@ -75,31 +95,11 @@ camera.send_command('DVI - BT.1120')
 camera.send_command('PLT - Lava')
 camera.send_command('IF - horizontal')
 
-# otevření opencv streamu pomocí V4L2 (jine moznosti jsou treba DIVX apod.)
-# iray = cv.VideoCapture(device_index, cv.CAP_V4L2)
-
 # -----------------
 # LIVE VIEW
 # ------------------
-# nastavení okna pro live-view
-cv.namedWindow('live-view', cv.WINDOW_NORMAL)
-cv.resizeWindow('live-view', 1200, 1000)
 
-# loop zobrazující liveview
-while True:
-    # Capture frame-by-frame
-    pohoda, frame_live = camera.read_frame()
-    if not pohoda:  # ret je return boolean, True když v pohodě vysílá
-        break
-
-    # Display the resulting frame
-    frame_live = cv.resize(frame_live, (int(640*1.9), int(512*1.9)))
-    cv.imshow('live-view', frame_live)
-    key = cv.waitKey(1)
-    if key == ord('q'):  # exit on q ... if key == 27 je pro ESC
-        break
-
-cv.destroyAllWindows()
+pre_measure_view(camera, resize_factor=1.9)
 
 # po zaostření a před záznamem (tam už mám nastavenou úpravu RAW formátu na Y16)
 thumbnail = create_thumbnail(camera)
@@ -153,10 +153,10 @@ data, casy, data_bod = [], [], []
 
 def update():
     # funkce updatující data pro zobrazení a záznam
-    success, frame = camera.read_frame() # shape je (512, 640, 2)
+    success, frame = camera.read_frame()  # shape je (512, 640, 2) - 8bit obrázek a 8bit registr
 
     frame = frame.astype('int16')  # vic mista
-    frame = frame[:,:,0] + (frame[:,:,1] << 8) # prvni frame + druhej * 256
+    frame = frame[:, :, 0] + (frame[:, :, 1] << 8)  # prvni frame + druhej * 256
 
     # data do grafu
     data_bod.append(frame[y_watch, x_watch])
