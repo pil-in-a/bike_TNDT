@@ -4,16 +4,23 @@ import cv2 as cv  # kvuli kameře - obraz
 import serial  # kvůli posílání hex commandů do kamery
 import numpy as np  # kvuli praci s arrays
 import time  # kvuli delay a pojmenovani souboru
-#import matplotlib.pyplot as plt  # kvuli vykreslovani grafu a obrazku
-#from matplotlib.animation import FuncAnimation  # funkce obstarávající zobrazení a záznam
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore
+import pyqtgraph as pg  # Nejrůznější Qt a pyqtgraph stuff pro zobrazování dat
+from PyQt6 import QtCore
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QMainWindow
 from commands import iray_commands as i_c  # dictionary s hex příkazama
 # další dependency zde je PyQt6 - pip install pyqt6 (pro linux)
 
 # -----------------
-# DEFINICE FUNKCÍ
+# DEFINICE FUNKCÍ A CLASSŮ
 # ------------------
+
+
+class CustomMainWindow(QMainWindow):
+    # třída, pomocí které si zavádim okno, které se dá zavřít pomocí Q
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Q:  # corrected to `Qt.Key.Key_Q`
+            self.close()  # Close the window
 
 
 def send_cmd(prikaz):
@@ -99,25 +106,40 @@ thumbnail = vytvor_thumbnail(iray)
 kamera_raw_nastaveni(iray)
 
 # vypocet intervalu pro QtTimer
-cas_ms = int((1 / (set_fps) * 1000))
+cas_ms = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
 
-# Nastavení zobrazovacího okna pyqtgraph
-app = pg.mkQApp("Zaznam")
-win = pg.GraphicsLayoutWidget(show=True, title="Zaznam dat z kamery", size=(1000,1000))
+# Nastavení zobrazovacího okna pyqtgraph a QtMainWindow
+# mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
+app = pg.mkQApp("Záznam")
+win = pg.GraphicsLayoutWidget(show=True, title="Basic plotting examples", size=(800, 1000))
+mainwindow = CustomMainWindow()
+mainwindow.setCentralWidget(win)
+mainwindow.show()
 
 pg.setConfigOptions(antialias=True)
 
+# Viewbox ve win widgetu pro zobrazení obrázku (ImageItem)
 p1 = win.addViewBox()
 p1.setAspectLocked()  # zanechává pixely čtvercové
 p1.invertY()  # obrátí obrázek vzhůru nohma -> správně
 
+# conatiner pro obrázek
 img = pg.ImageItem(axisOrder='row-major')  # axis order dává obrázek správně
 img.setColorMap('magma')
 p1.addItem(img)
 
+# Watch bod crosshair 40px
+# Vertical Line
+x_line = pg.PlotDataItem([x_watch, x_watch], [y_watch - 20, y_watch + 20], pen='g')
+p1.addItem(x_line)
+
+# Horizontal Line
+y_line = pg.PlotDataItem([x_watch - 20, x_watch + 20], [y_watch, y_watch], pen='g')
+p1.addItem(y_line)
+
 win.nextRow()
 
-p2 = win.addPlot(title="Updating plot")
+p2 = win.addPlot(title=f'Hodnoty v bodě ({x_watch}, {y_watch}')
 graf = p2.plot(pen='r')
 
 # iniciace dat pro záznam
@@ -129,13 +151,14 @@ def update():
     ret, frame = iray.read()
     data.append(frame)
     casy.append(time.time())
-
+    # data v grafu chci zobrazit jako 16bit aby se "nepřetejkali"
     data_do_grafu = frame[y_watch, x_watch, :].astype('int16')
     data_do_grafu = int(data_do_grafu[0] + (data_do_grafu[1] << 8))
     data_bod.append(data_do_grafu)
     graf.setData(data_bod)
 
-    img.setImage(frame[:,:,0])
+    img.setImage(frame[:, :, 0])
+
 
 # Shutter před náběrem
 send_cmd('DVI - LVCMOS')
@@ -149,12 +172,14 @@ timer = QtCore.QTimer()
 timer.timeout.connect(update)
 timer.start(cas_ms)
 
-pg.exec()
+# spuštění celýho Qt molochu
+app.exec()
 
 iray.release()  # Release the camera
 # ------------------------
 # ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
 # --------------------------
+print('Probíhá ukládání dat')
 # data dostavam z funkce jako list of 3D arrays (512,640,2) a dělám z toho (N, 512,640,2) int16
 data = np.stack(data, axis=0, dtype='int16')
 # stacking - druhej * 256 + prvni
