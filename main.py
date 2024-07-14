@@ -63,10 +63,10 @@ ser.baudrate = 115200
 time.sleep(2)  # dvě sekundy aby se všechno vzpamatovalo - hlavně serial
 
 # OVLADANI KAMERY po serial portu
-send_cmd('Auto NUC off')
-send_cmd('NUC - Shutter')
+#send_cmd('Auto NUC off')
+#send_cmd('NUC - Shutter')
 send_cmd('DVI - BT.1120')
-send_cmd('PLT - Iron')
+send_cmd('PLT - Lava')
 send_cmd('IF - horizontal')
 # TODO: tady to cvaká 2x ... tak se podívat, co to dělá
 
@@ -78,7 +78,7 @@ iray = cv.VideoCapture(device_index, cv.CAP_V4L2)
 # ------------------
 # nastavení okna pro live-view
 cv.namedWindow('live-view', cv.WINDOW_NORMAL)
-cv.resizeWindow('live-view', 1000, 800)
+cv.resizeWindow('live-view', 1200, 1000)
 
 # loop zobrazující liveview
 while True:
@@ -88,7 +88,7 @@ while True:
         break
 
     # Display the resulting frame
-    resized_obrazek = cv.resize(frame_live, (int(640*1.5), int(512*1.5)))
+    resized_obrazek = cv.resize(frame_live, (int(640*1.9), int(512*1.9)))
     cv.imshow('live-view', resized_obrazek)
     key = cv.waitKey(1)
     if key == ord('q'):  # exit on q ... if key == 27 je pro ESC
@@ -111,7 +111,7 @@ cas_ms = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
 # Nastavení zobrazovacího okna pyqtgraph a QtMainWindow
 # mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
 app = pg.mkQApp("Záznam")
-win = pg.GraphicsLayoutWidget(show=True, title="Basic plotting examples", size=(800, 1000))
+win = pg.GraphicsLayoutWidget(show=True, title="Basic plotting examples", size=(1200, 1000))
 mainwindow = CustomMainWindow()
 mainwindow.setCentralWidget(win)
 mainwindow.show()
@@ -148,23 +148,28 @@ data, casy, data_bod = [], [], []
 
 def update():
     # funkce updatující data pro zobrazení a záznam
-    ret, frame = iray.read()
-    data.append(frame)
-    casy.append(time.time())
-    # data v grafu chci zobrazit jako 16bit aby se "nepřetejkali"
-    data_do_grafu = frame[y_watch, x_watch, :].astype('int16')
-    data_do_grafu = int(data_do_grafu[0] + (data_do_grafu[1] << 8))
-    data_bod.append(data_do_grafu)
+    ret, frame = iray.read() # shape je (512, 640, 2)
+
+    frame = frame.astype('int16')  # vic mista
+    frame = frame[:,:,0] + (frame[:,:,1] << 8) # prvni frame + druhej * 256
+
+    # data do grafu
+    data_bod.append(frame[y_watch, x_watch])
     graf.setData(data_bod)
 
-    img.setImage(frame[:, :, 0])
+    # update obrazku do okna
+    img.setImage(frame)
+
+    # ukladani dat
+    data.append(frame)
+    casy.append(time.time())
 
 
 # Shutter před náběrem
 send_cmd('DVI - LVCMOS')
 send_cmd('DVS - NUC')
-send_cmd('NUC - Shutter')
 send_cmd('Auto NUC off')
+send_cmd('NUC - Shutter')
 time.sleep(2)  # dvě sekundy prodleva aby shutter nezasáhnul do záznamu
 
 # spouštění funkce update
@@ -180,10 +185,8 @@ iray.release()  # Release the camera
 # ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
 # --------------------------
 print('Probíhá ukládání dat')
-# data dostavam z funkce jako list of 3D arrays (512,640,2) a dělám z toho (N, 512,640,2) int16
+# data dostavam z funkce jako list of 3D arrays (512,640) a dělám z toho (N, 512,640) int16
 data = np.stack(data, axis=0, dtype='int16')
-# stacking - druhej * 256 + prvni
-data = data[:, :, :, 0] + (data[:, :, :, 1] << 8)
 
 folder_name, real_fps = vytvor_filename(casy[0], casy[-1], data.shape[0])
 # vytvoření folderu s názvem čas měření, FPS
