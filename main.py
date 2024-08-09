@@ -9,8 +9,15 @@ from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMainWindow
 from commands import iray_commands as i_c  # dictionary s hex příkazama
+import math
 from scipy.io import savemat  # pro ukládání matláku
+import platform
 # další dependency zde je PyQt6 - pip install pyqt6 (pro linux)
+
+# TODO: PySide místo PyQT6?
+# TODO: komprese dat - používám uint16 pro data s rozsahem kolem 2000
+# TODO: Pyqtgraph pro zobrazení preview i s crosshairem
+# TODO: správné používání PyQT
 
 # -----------------
 # DEFINICE FUNKCÍ A CLASSŮ
@@ -29,7 +36,10 @@ class Camera:
     # obsahuje už nějaký funkce, který se s ní prováděj
     def __init__(self, ser, device_index):
         self.ser = ser
-        self.device = cv.VideoCapture(device_index, cv.CAP_V4L2)
+        if platform.system() == 'Linux':
+            self.device = cv.VideoCapture(device_index, cv.CAP_V4L2)  # For Linux
+        else:
+            self.device = cv.VideoCapture(device_index)  # For Windows
 
     def send_command(self, command):
         ser.write(bytes.fromhex(i_c[command]))
@@ -45,18 +55,58 @@ class Camera:
         self.device.release()
 
 
+def calculate_fft(data, fps, frequency, folder_path):
+    # TODO: tahle funkce je moc rozsháhlá a možná by chtěla trochu zredukovat
+    rows = data.shape[1]
+    cols = data.shape[2]
+    frames = data.shape[0]
+    fps = round(fps)
+
+    # nachazim window pro fft a index pro danou freq
+    print('Hledání indexu pro danou frekvenci světel')
+    for fft_window in range(frames, 0, -1):
+        frequency_index = (frequency * fft_window) / fps
+        if frequency_index - math.floor(frequency_index) == 0:
+            frequency_index = int(frequency_index)  # nějaká ta +1 nebo tak nějak?
+            print(f'Index pro frekvenci {frequency} Hz je {frequency_index}, FFT počítána v okně {fft_window}')
+            break
+
+    print('výpočet FFT')
+    angle_image = np.zeros((fft_window, cols, rows), dtype='float')
+    for x in range(cols):
+        for y in range(rows):
+            fft_data = np.fft.fft(data[:fft_window, y, x])
+            angle_image[:, x, y] = np.angle(fft_data)
+
+    angle_image = angle_image[0:20, :, :]
+
+    np.save(f'{folder_path}uhel_{str(frequency_index)}.npy', angle_image)
+
+    # zobrazení výsledku
+    print('Zobrazení fft obrazu pro danou frekvenci světel')
+    rotated_angle_image = np.rot90(angle_image[frequency_index, :, :])
+    cv.imshow("FFT", rotated_angle_image)
+    cv.waitKey(0)
+    cv.destroyAllWindows()
+
+
 def create_thumbnail(device):
     _, image = device.read_frame()
     return image
 
 
 def create_filename(start, stop, n):
-    fps = str(n / (stop - start))
-    filename = f'{time.strftime("%H%M%S")}FPS{fps[0:2]}_{fps[3:6]}'
+    fps = n / (stop - start)
+    string_fps = str(fps)
+    if platform.system() == 'Windows':
+        filename = f'{time.strftime("%m%d%H%M")}FPS{string_fps[0:2]}' + '\\'
+    else:
+        filename = f'{time.strftime("%m%d%H%M")}FPS{string_fps[0:2]}' + '/'
     return filename, fps
 
 
 def pre_measure_view(device, resize_factor=1.9):
+    # TODO: předělat na PyQt a dát tam ten crosshair
     cv.namedWindow('live-view', cv.WINDOW_NORMAL)
     cv.resizeWindow('live-view', 1200, 1000)
 
@@ -75,18 +125,41 @@ def pre_measure_view(device, resize_factor=1.9):
     cv.destroyAllWindows()
 
 
+def write_props(folder_name, real_fps, set_fps, lights_frequency, data):
+    # funkce zapisující vybrané parametry do props.csv
+    props_filename = f'{folder_name}props.csv'
+
+    props_data = [
+        ['Realná FPS', real_fps],
+        ['Nastavená FPS', set_fps],
+        ['Frekvence světel', lights_frequency],
+        ['Tvar dat', data.shape]
+    ]
+
+    with open(props_filename, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(props_data)
+
+
 # KONSTANTY
-device_index = 2  # /dev/videoX
-port = 0  # /dev/ttyUSBX
+device_index = 2  # /dev/videoX, nebo windows
+port = 0  # /dev/ttyUSBX, nebo COMX
 cols, rows = 640, 512  # velikost snimku
-set_fps = 25  # nastavena fps pro zaznam
-x_watch = 320  # souradnice bodu, kde sleduju hodnotu
+set_fps = int(input('Zadej FPS pro snímání [1/s] (Enter pro default = 10):   ') or '10')  # nastaveni fps pro zaznam
+# zadani frekvence svetel pro následný výpočet FFT
+# winlin ? problém s desetinou čárkou?
+lights_frequency = float(input('Zadej frekvenci světel [Hz] (Enter pro default = 0.1):   ') or '0.1')
+x_watch = 320  # souradnice bodu, kde sleduju hodnotu a je tam křížek
 y_watch = 256
 
 # definice seriového portu
-ser = serial.Serial(f'/dev/ttyUSB{port}')
+if platform.system() == 'Windows':
+    ser = serial.Serial(f'COM{port + 1}')  # For Windows
+else:
+    ser = serial.Serial(f'/dev/ttyUSB{port}')  # For Linux
 ser.baudrate = 115200
 
+# inicializace kamery
 camera = Camera(ser, device_index)
 
 # OVLADANI KAMERY po serial portu
@@ -111,7 +184,7 @@ thumbnail = create_thumbnail(camera)
 camera.setup_raw_mode()
 
 # vypocet intervalu pro QtTimer
-cas_ms = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
+frame_time = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
 
 # Nastavení zobrazovacího okna pyqtgraph a QtMainWindow
 # mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
@@ -155,7 +228,13 @@ def update():
     # funkce updatující data pro zobrazení a záznam
     success, frame = camera.read_frame()  # shape je (512, 640, 2) - 8bit obrázek a 8bit registr
 
-    frame = frame.astype('int16')  # vic mista
+    # volá to update funkci i úplně na konci, když má ukázat výsledek calculate_fft()
+    # pak to hází chyby, že nemá frame
+    if frame is None:
+        print("Nesprávně volaná update() funkce!")
+        return
+
+    frame = frame.astype('uint16')  # vic mista
     frame = frame[:, :, 0] + (frame[:, :, 1] << 8)  # prvni frame + druhej * 256
 
     # data do grafu
@@ -180,38 +259,51 @@ time.sleep(2)  # dvě sekundy prodleva aby shutter nezasáhnul do záznamu
 # spouštění funkce update
 timer = QtCore.QTimer()
 timer.timeout.connect(update)
-timer.start(cas_ms)
+timer.start(frame_time)
 
 # spuštění celýho Qt molochu
 app.exec()
 
+timer.stop()
 camera.release_camera()  # Release the camera
 # ------------------------
 # ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
 # --------------------------
 print('Probíhá ukládání dat')
-# data dostavam z funkce jako list of 3D arrays (512,640) a dělám z toho (N, 512,640) int16
-data = np.stack(data, axis=0, dtype='int16')
+# data dostavam z funkce jako list of 3D arrays (512,640) a dělám z toho (N, 512,640) uint16
+data = np.stack(data, axis=0, dtype='uint16')
 
 folder_name, real_fps = create_filename(casy[0], casy[-1], data.shape[0])
 # vytvoření folderu s názvem čas měření, FPS
-makedirs(folder_name, exist_ok=True)
+makedirs(folder_name[0:-1], exist_ok=True)
 
 # uložení dat
-np.save(file=f'{folder_name}/data.npy', arr=data)
-print(f'Byl vytvořen folder s názvem {folder_name}. Data mají {data.shape[0]} snímků a {real_fps[0:6]} FPS.')
+print('Ukládání dat - data.npy')
+np.save(file=f'{folder_name}data.npy', arr=data)
+print(f'Byl vytvořen folder s názvem {folder_name[0:-1]}. Data mají {data.shape[0]} snímků a {round(real_fps, 3)} FPS.')
 
 # uložení timestampu
-with open(f'{folder_name}/timestamps.csv', 'w', newline='') as csvfile:
+print('Ukládání timestampů - timestamps.csv')
+with open(f'{folder_name}timestamps.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow(casy)
 
 # uložení thumbnailu
-cv.imwrite(f"{folder_name}/thumb.png", thumbnail)
+print('Ukládání thumbnailu - thumb.png')
+cv.imwrite(f"{folder_name}thumb.png", thumbnail)
 
 # uložení matlabu
-savemat(f'{folder_name}/{folder_name}.mat', {f'{folder_name}': data})
+print('Ukládání matlabových dat - .mat')
+savemat(f'{folder_name}{folder_name[0:-1]}.mat', {'data': data})
+
+# uložení props
+print('Ukládání souboru s parametry měření - props.csv')
+write_props(folder_name, real_fps, set_fps, lights_frequency, data)
 
 # vyslání příkazu na NUC shutter
 camera.send_command('NUC - Shutter')
 camera.send_command('Factory defaults')
+
+# vypocet FFT
+calculate_fft(data, real_fps, lights_frequency, folder_name)
+print('Měření ukončeno.')
