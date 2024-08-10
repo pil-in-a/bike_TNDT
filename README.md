@@ -5,3 +5,5 @@
 `mrm_watch_raw` - marimo porohlížečka nabrané sekvence
 
 dále je potřeba lokálně uložený `commands.py` a `device.txt`
+
+Have fun!
