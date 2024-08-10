@@ -202,7 +202,7 @@ y_watch = 256
 
 # definice seriového portu
 if platform.system() == 'Windows':
-    ser = serial.Serial(f'COM{port + 1}')  # For Windows
+    ser = serial.Serial(f'COM{port}')  # For Windows
 else:
     ser = serial.Serial(f'/dev/ttyUSB{port}')  # For Linux
 ser.baudrate = 115200
