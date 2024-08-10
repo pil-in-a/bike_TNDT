@@ -32,7 +32,7 @@ class CustomMainWindow(QMainWindow):
 
 
 class Camera:
-    # třída Camera, při iniciaci provedfe cv.Videocapture()
+    # třída Camera, při iniciaci provede cv.Videocapture()
     # obsahuje už nějaký funkce, který se s ní prováděj
     def __init__(self, ser, device_index):
         self.ser = ser
@@ -56,16 +56,22 @@ class Camera:
 
 
 def calculate_fft(data, fps, frequency, folder_path):
-    # TODO: tahle funkce je moc rozsháhlá a možná by chtěla trochu zredukovat
+    # TODO: tahle funkce je celkově dost rozsháhlá a možná by chtěla trochu zredukovat
     rows = data.shape[1]
     cols = data.shape[2]
     frames = data.shape[0]
     fps = round(fps)
+    # TODO: pokud zaokrouhluje moc, vzniká velká nepřesnost a obraz na frequency_index nebude vypovídající -> nějak
+    #  vyhezkat
 
     # nachazim window pro fft a index pro danou freq
     print('Hledání indexu pro danou frekvenci světel')
-    for fft_window in range(frames, 0, -1):
+    for fft_window in range(frames, 0, -1):  # hledá nějvětší okno -> počítá odzadu a zmenšuje
         frequency_index = (frequency * fft_window) / fps
+        if fft_window <= 20:
+            print('Okno je příliš malé, FFT nelze vypočítat')
+            fft_window, frequency_index = None, None
+            break
         if frequency_index - math.floor(frequency_index) == 0:
             frequency_index = int(frequency_index)  # nějaká ta +1 nebo tak nějak?
             print(f'Index pro frekvenci {frequency} Hz je {frequency_index}, FFT počítána v okně {fft_window}')
@@ -91,11 +97,32 @@ def calculate_fft(data, fps, frequency, folder_path):
 
 
 def create_thumbnail(device):
+    """
+    Vytvoří numpy array jednoho snímku z kamery, ketrý je možné následně uložit jako thumbnail.
+
+    :param device: Kamera, ze které dělá snímek
+    :type device: class 'cv2.VideoCapture'
+    :return: None
+    :rtype: None
+    """
     _, image = device.read_frame()
     return image
 
 
-def create_filename(start, stop, n):
+def create_filename_and_fps(start, stop, n):
+    """
+    Funkce vytváří název adresáře pro uložení naměřených dat a dalších souborů.
+    Dále vypořítá reálnou FPS, která je součástí onoho názvu.
+
+    :param start: Cas začátku měření vytvořený funkcí time.time()
+    :type start: float
+    :param stop: Cas konce měření vytvořený funkcí time.time()
+    :type stop: float
+    :param n: Počet snímků naměřených v sekvenci
+    :type n: int
+    :return: Tuple obsahující název adresáře pro uložení dat obsahující správné lomítko na konci (Linux, Windows) a vypočtenou FPS
+    :rtype filename: tuple (str, float)
+    """
     fps = n / (stop - start)
     string_fps = str(fps)
     if platform.system() == 'Windows':
@@ -140,10 +167,31 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data):
         writer = csv.writer(f)
         writer.writerows(props_data)
 
+def read_device_txt():
+    """
+    Funkce čte soubor device.txt a vrací hodnoty potřebné pro inicializaci kamery. \n
+    soubor device.txt vypadá např: \n
+        Device index 2 , serial port 0
+
+    Pro Linux:
+        Device index - /dev/video*X* termokamery \n
+        serial port - /dev/ttyUSB*X* termokamery \n
+    Pro Windows:
+        Device index - prostě index kamery - nejčastějc 0, pokud není integrovaná kamera \n
+        serial port - COM*X* \n
+
+    :return: Tuple obsahující index kamery a číslo seriového portu.
+    :rtype: tuple (int, int)
+    """
+    with open('device.txt', 'r') as file:
+        data = file.read()
+        device_index, port = [int(s) for s in data.split() if s.isdigit()]
+        # rozseká string a když je to číslo, tak si to zapíše
+    return device_index, port
+
 
 # KONSTANTY
-device_index = 2  # /dev/videoX, nebo windows
-port = 0  # /dev/ttyUSBX, nebo COMX
+device_index, port = read_device_txt()
 cols, rows = 640, 512  # velikost snimku
 set_fps = int(input('Zadej FPS pro snímání [1/s] (Enter pro default = 10):   ') or '10')  # nastaveni fps pro zaznam
 # zadani frekvence svetel pro následný výpočet FFT
@@ -273,7 +321,7 @@ print('Probíhá ukládání dat')
 # data dostavam z funkce jako list of 3D arrays (512,640) a dělám z toho (N, 512,640) uint16
 data = np.stack(data, axis=0, dtype='uint16')
 
-folder_name, real_fps = create_filename(casy[0], casy[-1], data.shape[0])
+folder_name, real_fps = create_filename_and_fps(casy[0], casy[-1], data.shape[0])
 # vytvoření folderu s názvem čas měření, FPS
 makedirs(folder_name[0:-1], exist_ok=True)
 
