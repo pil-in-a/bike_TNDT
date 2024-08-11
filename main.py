@@ -39,7 +39,7 @@ class Camera:
         if platform.system() == 'Linux':
             self.device = cv.VideoCapture(device_index, cv.CAP_V4L2)  # For Linux
         else:
-            self.device = cv.VideoCapture(device_index)  # For Windows
+            self.device = cv.VideoCapture(device_index, cv.CAP_MSMF)  # For Windows
 
     def send_command(self, command):
         ser.write(bytes.fromhex(i_c[command]))
@@ -229,12 +229,13 @@ thumbnail = create_thumbnail(camera)
 # ZAZNAM
 # ----------------------
 # nastavení správného raw formátu
+camera = Camera(ser, device_index)  # nová inicializace kamery, protože MSMF měl nějakej problém
 camera.setup_raw_mode()
 
 # vypocet intervalu pro QtTimer
 frame_time = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
 
-# Nastavení zobrazovacího okna pyqtgraph a QtMainWindow
+# NASTAVENÍ ZOBRAZOVACÍHO OKNA pyqtgraph a QtMainWindow
 # mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
 app = pg.mkQApp("Záznam")
 win = pg.GraphicsLayoutWidget(show=True, title="Basic plotting examples", size=(1200, 1000))
@@ -268,19 +269,26 @@ win.nextRow()
 p2 = win.addPlot(title=f'Hodnoty v bodě ({x_watch}, {y_watch}')
 graf = p2.plot(pen='r')
 
+# -------------------------------
+
 # iniciace dat pro záznam
 data, casy, data_bod = [], [], []
 
 
 def update():
     # funkce updatující data pro zobrazení a záznam
-    success, frame = camera.read_frame()  # shape je (512, 640, 2) - 8bit obrázek a 8bit registr
+    success, frame = camera.read_frame()  # shape je (512, 640, 2) - 8bit obrázek a 8bit registr - pro V4L2 backend
 
     # volá to update funkci i úplně na konci, když má ukázat výsledek calculate_fft()
     # pak to hází chyby, že nemá frame
     if frame is None:
         print("Nesprávně volaná update() funkce!")
         return
+
+    if platform.system() == 'Windows':  # protože MSMF plive RAW data ve formátu (1, 655360)
+        frame = frame.reshape(512, 640, 2)
+    else:
+        pass
 
     frame = frame.astype('uint16')  # vic mista
     frame = frame[:, :, 0] + (frame[:, :, 1] << 8)  # prvni frame + druhej * 256
@@ -304,7 +312,7 @@ camera.send_command('Auto NUC off')
 camera.send_command('NUC - Shutter')
 time.sleep(2)  # dvě sekundy prodleva aby shutter nezasáhnul do záznamu
 
-# spouštění funkce update
+# spouštění funkce update - samotný běh loopu
 timer = QtCore.QTimer()
 timer.timeout.connect(update)
 timer.start(frame_time)
