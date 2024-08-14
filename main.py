@@ -56,6 +56,20 @@ class Camera:
 
 
 def calculate_fft(data, fps, frequency, folder_path):
+    """
+    Funkce spočítá FFT z nabraných dat. Uloží soubor uhel npy s prvními dvaceti snímky fft a vrátí vypočtený index odpovídající frekvenci ohřevu.
+
+    :param data: Nabraná data.
+    :type data: np.array()
+    :param fps: Reálná vypočtená FPS
+    :type fps: float
+    :param frequency: Nastavená frekvence ohřevu
+    :type frequency: float
+    :param folder_path: Název adresáře pro uložení dat s lomítkem na konci
+    :type folder_path: str
+    :return: Index snímku odpovídajícímu frekvenci ohřevu
+    :rtype frequency_index: int
+    """
     # TODO: tahle funkce je celkově dost rozsháhlá a možná by chtěla trochu zredukovat
     rows = data.shape[1]
     cols = data.shape[2]
@@ -86,14 +100,16 @@ def calculate_fft(data, fps, frequency, folder_path):
 
     angle_image = angle_image[0:20, :, :]
 
-    np.save(f'{folder_path}uhel_{str(frequency_index)}.npy', angle_image)
+    np.save(f'{folder_path}uhel.npy', angle_image)
 
     # zobrazení výsledku
     print('Zobrazení fft obrazu pro danou frekvenci světel')
     rotated_angle_image = np.rot90(angle_image[frequency_index, :, :])
-    cv.imshow("FFT", rotated_angle_image)
+    cv.imshow("FFT - zmackni Q pro ukonceni", rotated_angle_image)
     cv.waitKey(0)
     cv.destroyAllWindows()
+
+    return frequency_index
 
 
 def create_thumbnail(device):
@@ -134,8 +150,8 @@ def create_filename_and_fps(start, stop, n):
 
 def pre_measure_view(device, resize_factor=1.9):
     # TODO: předělat na PyQt a dát tam ten crosshair
-    cv.namedWindow('live-view', cv.WINDOW_NORMAL)
-    cv.resizeWindow('live-view', 1200, 1000)
+    cv.namedWindow('live-view - zmackni Q pro pokracovani', cv.WINDOW_NORMAL)
+    cv.resizeWindow('live-view - zmackni Q pro pokracovani', 1200, 1000)
 
     while True:
         pohoda, frame_live = device.read_frame()
@@ -152,7 +168,7 @@ def pre_measure_view(device, resize_factor=1.9):
     cv.destroyAllWindows()
 
 
-def write_props(folder_name, real_fps, set_fps, lights_frequency, data):
+def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index):
     # funkce zapisující vybrané parametry do props.csv
     props_filename = f'{folder_name}props.csv'
 
@@ -160,7 +176,8 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data):
         ['Realná FPS', real_fps],
         ['Nastavená FPS', set_fps],
         ['Frekvence světel', lights_frequency],
-        ['Tvar dat', data.shape]
+        ['Tvar dat', data.shape],
+        ['Index FFT pro danou frekvenci světel', frequency_index]
     ]
 
     with open(props_filename, 'w', newline='') as f:
@@ -229,7 +246,10 @@ thumbnail = create_thumbnail(camera)
 # ZAZNAM
 # ----------------------
 # nastavení správného raw formátu
-camera = Camera(ser, device_index)  # nová inicializace kamery, protože MSMF měl nějakej problém
+if platform.system() == "Windows":
+    camera = Camera(ser, device_index)  # nová inicializace kamery, protože MSMF měl nějakej problém
+else:
+    pass
 camera.setup_raw_mode()
 
 # vypocet intervalu pro QtTimer
@@ -237,8 +257,8 @@ frame_time = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
 
 # NASTAVENÍ ZOBRAZOVACÍHO OKNA pyqtgraph a QtMainWindow
 # mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
-app = pg.mkQApp("Záznam")
-win = pg.GraphicsLayoutWidget(show=True, title="Basic plotting examples", size=(1200, 1000))
+app = pg.mkQApp("Záznam - stiskni Q pro ukončení záznamu")
+win = pg.GraphicsLayoutWidget(show=True, title="Záznam - stiskni Q pro pokračování", size=(1200, 1000))
 mainwindow = CustomMainWindow()
 mainwindow.setCentralWidget(win)
 mainwindow.show()
@@ -352,14 +372,14 @@ cv.imwrite(f"{folder_name}thumb.png", thumbnail)
 print('Ukládání matlabových dat - .mat')
 savemat(f'{folder_name}{folder_name[0:-1]}.mat', {'data': data})
 
-# uložení props
-print('Ukládání souboru s parametry měření - props.csv')
-write_props(folder_name, real_fps, set_fps, lights_frequency, data)
-
 # vyslání příkazu na NUC shutter
 camera.send_command('NUC - Shutter')
 camera.send_command('Factory defaults')
 
-# vypocet FFT
-calculate_fft(data, real_fps, lights_frequency, folder_name)
+# definice proměnné frequency_index, který spustí výpočet FPS
+frequency_index = calculate_fft(data, real_fps, lights_frequency, folder_name)
 print('Měření ukončeno.')
+
+# uložení props
+print('Ukládání souboru s parametry měření - props.csv')
+write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index)
