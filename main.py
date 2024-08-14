@@ -159,7 +159,7 @@ def pre_measure_view(device, resize_factor=1.9):
             break
 
         frame_live = cv.resize(frame_live, (int(640 * resize_factor), int(512 * resize_factor)))
-        cv.imshow('live-view', frame_live)
+        cv.imshow('live-view - zmackni Q pro pokracovani', frame_live)
         key = cv.waitKey(1)
 
         if key == ord('q'):
