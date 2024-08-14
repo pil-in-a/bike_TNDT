@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.7.19"
+__generated_with = "0.7.20"
 app = marimo.App()
 
 
@@ -52,7 +52,7 @@ def __(i_c, mo, ser):
         Vyber z příkazů v seznamu:\n
         NUC - Non Uniformity Correction \n
         PLT - barevné palety \n
-        DVI - Digital Video Interface (fungují jen BT656, BT1120 a CDS-2 only supports DRC DVS) \n
+        DVI - Digital Video Interface (fungují jen LVCMOS, BT1120 a CDS-2 only supports DRC DVS) \n
         DVS - Digital Video Source \n
         IF - Image Flip \n
         CVBS - ?
