@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.7.0"
+__generated_with = "0.7.19"
 app = marimo.App(width="full")
 
 
@@ -10,19 +10,60 @@ def __():
     import matplotlib.pyplot as plt
     import numpy as np
     import scipy
-    return mo, np, plt, scipy
+    import csv
+    import platform
+    import os
+    return csv, mo, np, os, platform, plt, scipy
 
 
 @app.cell
-def __(mo):
-    text_field = mo.ui.text(value="072602FPS15_642/uhel_6.npy")
-    return text_field,
+def __(__file__, os):
+    script_location = os.path.dirname(os.path.abspath(__file__))
+    folder_list = ['---']
+
+    # Iterate through all entries in the script's directory
+    for entry in os.listdir(script_location):
+        full_path = os.path.join(script_location, entry)
+        # Check if the entry is a directory
+        if os.path.isdir(full_path) and not (('.') in entry):
+            folder_list.append(entry)
+
+    folder_list.sort()
+    return entry, folder_list, full_path, script_location
 
 
 @app.cell
-def __(text_field):
-    freq_index = int(text_field.value[-5:-4])
-    return freq_index,
+def __(folder_list, mo):
+    form_file = mo.ui.dropdown(options=folder_list, value="---", label='Vyber folder s daty:').form(submit_button_label='Zobraz')
+    form_file
+    return form_file,
+
+
+@app.cell
+def __(form_file, mo, platform):
+    mo.stop(form_file.value is None, mo.md('Vyber soubor z nabídky!'))
+
+    if platform.system() == 'Windows':
+        folder = f"{form_file.value}" + "\\"
+    else:
+        folder = f"{form_file.value}" + "/"
+
+    filename = f"{folder}uhel.npy"
+    return filename, folder
+
+
+@app.cell
+def __(csv, folder):
+    props_dict = {}
+    with open(f'{folder}props.csv', mode='r') as file:
+        csv_reader = csv.reader(file)
+        for row in csv_reader:
+            key = row[0]
+            value = row[1]
+            props_dict[key] = value
+
+    freq_index = int(props_dict['Index FFT pro danou frekvenci světel'])
+    return csv_reader, file, freq_index, key, props_dict, row, value
 
 
 @app.cell
@@ -35,22 +76,16 @@ def __(freq_index, mo):
 
 
 @app.cell
+def __(filename, frame_slider, np, rotace_slider, scipy):
+    uhel = np.load(filename)
+    uhel_show = scipy.ndimage.rotate(uhel[frame_slider.value,:,:],rotace_slider.value)
+    return uhel, uhel_show
+
+
+@app.cell
 def __(mo, np, uhel_show):
     range_slider = mo.ui.range_slider(start=np.min(uhel_show), stop=np.max(uhel_show), step=0.01, show_value=True, label='range', full_width=True)
     return range_slider,
-
-
-@app.cell
-def __(np, text_field):
-    uhel = np.load(text_field.value)
-    print(uhel.shape)
-    return uhel,
-
-
-@app.cell
-def __(frame_slider, rotace_slider, scipy, uhel):
-    uhel_show = scipy.ndimage.rotate(uhel[frame_slider.value,:,:],rotace_slider.value)
-    return uhel_show,
 
 
 @app.cell
@@ -81,11 +116,10 @@ def __(
     roi_bod_2y,
     roi_checkbox,
     rotace_slider,
-    text_field,
 ):
     mo.vstack(
         [
-            mo.hstack([text_field, frame_slider, rotace_slider, roi_checkbox, colormap]),
+            mo.hstack([frame_slider, rotace_slider, roi_checkbox, colormap]),
             range_slider,
             mo.hstack([roi_bod_1x, roi_bod_1y, roi_bod_2x, roi_bod_2y])
         ],
@@ -126,4 +160,3 @@ def __(
 
 if __name__ == "__main__":
     app.run()
-
