@@ -228,9 +228,10 @@ ser.baudrate = 115200
 camera = Camera(ser, device_index)
 
 # OVLADANI KAMERY po serial portu
-# kdoví proč to tu zároven i cvakne :D
+# při IF provádí NUC shutter, 2x IF je tam, kdyby byl nějakej špatnej výchozí stav
 camera.send_command('DVI - BT.1120')
 camera.send_command('PLT - Lava')
+camera.send_command('IF - off')
 camera.send_command('IF - horizontal')
 
 # -----------------
