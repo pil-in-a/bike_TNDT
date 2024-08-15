@@ -212,7 +212,18 @@ if __name__ == "__main__":
     cols, rows = 640, 512  # velikost snimku
     set_fps = int(input('Zadej FPS pro snímání [1/s] (Enter pro default = 10):   ') or '10')  # nastaveni fps pro zaznam
     # zadani frekvence svetel pro následný výpočet FFT
-    lights_frequency = float(input('Zadej frekvenci světel [Hz] (Enter pro default = 0.1):   ') or '0.1')
+    # TODO: error handling - while loop
+    print("""Pro jako frekvenci nebo periodu ohřevu bude počítána FFT?
+    zadej např 0.1, 0.083, ... pro frekvenci v Hz
+    nebo p10, p12, ... pro periodu v sekundách
+    """)
+    lights_frequency = (input('(default = 0.1Hz):    ') or '0.1')
+
+    if 'p' in lights_frequency:
+        lights_frequency = 1 / float(lights_frequency[1:])
+    else:
+        lights_frequency = float(lights_frequency)
+
     x_watch = 320  # souradnice bodu, kde sleduju hodnotu a je tam křížek
     y_watch = 256
     # definice seriového portu
