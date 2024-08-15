@@ -30,7 +30,16 @@ def update_csv_value(file_path, new_value, target_key="Index FFT pro danou frekv
 # DATA INPUT
 
 folder = input('Zadej název folderu s daty:    ')
-frequency = float(input('Pro jakou frekvenci chceš přepočítat FFT? (default = 0.1Hz):    ') or '0.1')
+print("""Pro jako frekvenci nebo periodu ohřevu bude počítána FFT?
+zadej např 0.1, 0.083, ... pro frekvenci v Hz
+nebo p10, p12, ... pro periodu v sekundách
+""")
+frequency = (input('(default = 0.1Hz):    ') or '0.1')
+
+if 'p' in frequency:
+    frequency = 1/float(frequency[1:])
+else:
+    frequency = float(frequency)
 
 # platform specific folder s lomítkem
 if platform.system() == 'Windows':
