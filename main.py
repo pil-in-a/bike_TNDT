@@ -206,181 +206,155 @@ def read_device_txt():
         # rozseká string a když je to číslo, tak si to zapíše
     return device_index, port
 
-
-# KONSTANTY
-device_index, port = read_device_txt()
-cols, rows = 640, 512  # velikost snimku
-set_fps = int(input('Zadej FPS pro snímání [1/s] (Enter pro default = 10):   ') or '10')  # nastaveni fps pro zaznam
-# zadani frekvence svetel pro následný výpočet FFT
-# winlin ? problém s desetinou čárkou?
-lights_frequency = float(input('Zadej frekvenci světel [Hz] (Enter pro default = 0.1):   ') or '0.1')
-x_watch = 320  # souradnice bodu, kde sleduju hodnotu a je tam křížek
-y_watch = 256
-
-# definice seriového portu
-if platform.system() == 'Windows':
-    ser = serial.Serial(f'COM{port}')  # For Windows
-else:
-    ser = serial.Serial(f'/dev/ttyUSB{port}')  # For Linux
-ser.baudrate = 115200
-
-# inicializace kamery
-camera = Camera(ser, device_index)
-
-# OVLADANI KAMERY po serial portu
-# při IF provádí NUC shutter, 2x IF je tam, kdyby byl nějakej špatnej výchozí stav
-camera.send_command('DVI - BT.1120')
-camera.send_command('PLT - Lava')
-camera.send_command('IF - off')
-camera.send_command('IF - horizontal')
-
-# -----------------
-# LIVE VIEW
-# ------------------
-
-pre_measure_view(camera, resize_factor=1.9)
-
-# po zaostření a před záznamem (tam už mám nastavenou úpravu RAW formátu na Y16)
-thumbnail = create_thumbnail(camera)
-
-# -------------------
-# ZAZNAM
-# ----------------------
-# nastavení správného raw formátu
-if platform.system() == "Windows":
-    camera = Camera(ser, device_index)  # nová inicializace kamery, protože MSMF měl nějakej problém
-else:
-    pass
-camera.setup_raw_mode()
-
-# vypocet intervalu pro QtTimer
-frame_time = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
-
-# NASTAVENÍ ZOBRAZOVACÍHO OKNA pyqtgraph a QtMainWindow
-# mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
-app = pg.mkQApp("Záznam - stiskni Q pro ukončení záznamu")
-win = pg.GraphicsLayoutWidget(show=True, title="Záznam - stiskni Q pro pokračování", size=(1200, 1000))
-mainwindow = CustomMainWindow()
-mainwindow.setCentralWidget(win)
-mainwindow.show()
-
-pg.setConfigOptions(antialias=True)
-
-# Viewbox ve win widgetu pro zobrazení obrázku (ImageItem)
-p1 = win.addViewBox()
-p1.setAspectLocked()  # zanechává pixely čtvercové
-p1.invertY()  # obrátí obrázek vzhůru nohma -> správně
-
-# conatiner pro obrázek
-img = pg.ImageItem(axisOrder='row-major')  # axis order dává obrázek správně
-img.setColorMap('magma')
-p1.addItem(img)
-
-# Watch bod crosshair 40px
-# Vertical Line
-x_line = pg.PlotDataItem([x_watch, x_watch], [y_watch - 20, y_watch + 20], pen='g')
-p1.addItem(x_line)
-
-# Horizontal Line
-y_line = pg.PlotDataItem([x_watch - 20, x_watch + 20], [y_watch, y_watch], pen='g')
-p1.addItem(y_line)
-
-win.nextRow()
-
-p2 = win.addPlot(title=f'Hodnoty v bodě ({x_watch}, {y_watch}')
-graf = p2.plot(pen='r')
-
-# -------------------------------
-
-# iniciace dat pro záznam
-data, casy, data_bod = [], [], []
-
-
-def update():
-    # funkce updatující data pro zobrazení a záznam
-    success, frame = camera.read_frame()  # shape je (512, 640, 2) - 8bit obrázek a 8bit registr - pro V4L2 backend
-
-    # volá to update funkci i úplně na konci, když má ukázat výsledek calculate_fft()
-    # pak to hází chyby, že nemá frame
-    if frame is None:
-        print("Nesprávně volaná update() funkce!")
-        return
-
-    if platform.system() == 'Windows':  # protože MSMF plive RAW data ve formátu (1, 655360)
-        frame = frame.reshape(512, 640, 2)
+if __name__ == "__main__":
+    # KONSTANTY
+    device_index, port = read_device_txt()
+    cols, rows = 640, 512  # velikost snimku
+    set_fps = int(input('Zadej FPS pro snímání [1/s] (Enter pro default = 10):   ') or '10')  # nastaveni fps pro zaznam
+    # zadani frekvence svetel pro následný výpočet FFT
+    lights_frequency = float(input('Zadej frekvenci světel [Hz] (Enter pro default = 0.1):   ') or '0.1')
+    x_watch = 320  # souradnice bodu, kde sleduju hodnotu a je tam křížek
+    y_watch = 256
+    # definice seriového portu
+    if platform.system() == 'Windows':
+        ser = serial.Serial(f'COM{port}')  # For Windows
+    else:
+        ser = serial.Serial(f'/dev/ttyUSB{port}')  # For Linux
+    ser.baudrate = 115200
+    # inicializace kamery
+    camera = Camera(ser, device_index)
+    # OVLADANI KAMERY po serial portu
+    # při IF provádí NUC shutter, 2x IF je tam, kdyby byl nějakej špatnej výchozí stav
+    camera.send_command('DVI - BT.1120')
+    camera.send_command('PLT - Lava')
+    camera.send_command('IF - off')
+    camera.send_command('IF - horizontal')
+    # -----------------
+    # LIVE VIEW
+    # ------------------
+    pre_measure_view(camera, resize_factor=1.9)
+    # po zaostření a před záznamem (tam už mám nastavenou úpravu RAW formátu na Y16)
+    thumbnail = create_thumbnail(camera)
+    # -------------------
+    # ZAZNAM
+    # ----------------------
+    # nová inicializace kamery, protože MSMF měl nějakej problém
+    if platform.system() == "Windows":
+        camera = Camera(ser, device_index)
     else:
         pass
+    # nastavení správného raw formátu
+    camera.setup_raw_mode()
+    # vypocet intervalu pro QtTimer
+    frame_time = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
+    # NASTAVENÍ ZOBRAZOVACÍHO OKNA pyqtgraph a QtMainWindow
+    # mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
+    app = pg.mkQApp("Záznam - stiskni Q pro ukončení záznamu")
+    win = pg.GraphicsLayoutWidget(show=True, title="Záznam - stiskni Q pro pokračování", size=(1200, 1000))
+    mainwindow = CustomMainWindow()
+    mainwindow.setCentralWidget(win)
+    mainwindow.show()
+    pg.setConfigOptions(antialias=True)
+    # Viewbox ve win widgetu pro zobrazení obrázku (ImageItem)
+    p1 = win.addViewBox()
+    p1.setAspectLocked()  # zanechává pixely čtvercové
+    p1.invertY()  # obrátí obrázek vzhůru nohma -> správně
+    # conatiner pro obrázek
+    img = pg.ImageItem(axisOrder='row-major')  # axis order dává obrázek správně
+    img.setColorMap('magma')
+    p1.addItem(img)
+    # Watch bod crosshair 40px
+    # Vertical Line
+    x_line = pg.PlotDataItem([x_watch, x_watch], [y_watch - 20, y_watch + 20], pen='g')
+    p1.addItem(x_line)
+    # Horizontal Line
+    y_line = pg.PlotDataItem([x_watch - 20, x_watch + 20], [y_watch, y_watch], pen='g')
+    p1.addItem(y_line)
+    win.nextRow()
+    p2 = win.addPlot(title=f'Hodnoty v bodě ({x_watch}, {y_watch}')
+    graf = p2.plot(pen='r')
+    # -------------------------------
+    # iniciace dat pro záznam
+    data, casy, data_bod = [], [], []
 
-    frame = frame.astype('uint16')  # vic mista
-    frame = frame[:, :, 0] + (frame[:, :, 1] << 8)  # prvni frame + druhej * 256
 
-    # data do grafu
-    data_bod.append(frame[y_watch, x_watch])
-    graf.setData(data_bod)
+    def update():
+        # funkce updatující data pro zobrazení a záznam
+        success, frame = camera.read_frame()  # shape je (512, 640, 2) - 8bit obrázek a 8bit registr - pro V4L2 backend
+        # volá to update funkci i úplně na konci, když má ukázat výsledek calculate_fft()
+        # pak to hází chyby, že nemá frame
+        if frame is None:
+            print("Nesprávně volaná update() funkce!")
+            return
+        if platform.system() == 'Windows':  # protože MSMF plive RAW data ve formátu (1, 655360)
+            frame = frame.reshape(512, 640, 2)
+        else:
+            pass
+        frame = frame.astype('uint16')  # vic mista
+        frame = frame[:, :, 0] + (frame[:, :, 1] << 8)  # prvni frame + druhej * 256
+        # data do grafu
+        data_bod.append(frame[y_watch, x_watch])
+        graf.setData(data_bod)
+        # update obrazku do okna
+        img.setImage(frame)
+        # ukladani dat
+        data.append(frame)
+        casy.append(time.time())
 
-    # update obrazku do okna
-    img.setImage(frame)
 
-    # ukladani dat
-    data.append(frame)
-    casy.append(time.time())
+    # Shutter před náběrem
+    camera.send_command('DVI - LVCMOS')
+    camera.send_command('DVS - NUC')
+    camera.send_command('Auto NUC off')
+    camera.send_command('NUC - Shutter')
+    time.sleep(2)  # dvě sekundy prodleva aby shutter nezasáhnul do záznamu
+    # spouštění funkce update - samotný běh loopu
+    timer = QtCore.QTimer()
+    timer.timeout.connect(update)
+    timer.start(frame_time)
+    # spuštění celýho Qt molochu
+    app.exec()
+    timer.stop()
+    camera.release_camera()  # Release the camera
+    # ------------------------
+    # ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
+    # --------------------------
+    print('Probíhá ukládání dat')
+    # data dostavam z funkce jako list of 3D arrays (512,640) a dělám z toho (N, 512,640) uint16
+    data = np.stack(data, axis=0, dtype='uint16')
+    folder_name, real_fps = create_filename_and_fps(casy[0], casy[-1], data.shape[0])
 
+    # vytvoření folderu s názvem čas měření, FPS
+    makedirs(folder_name[0:-1], exist_ok=True)
 
-# Shutter před náběrem
-camera.send_command('DVI - LVCMOS')
-camera.send_command('DVS - NUC')
-camera.send_command('Auto NUC off')
-camera.send_command('NUC - Shutter')
-time.sleep(2)  # dvě sekundy prodleva aby shutter nezasáhnul do záznamu
+    # uložení dat
+    print('Ukládání dat - data.npy')
+    np.save(file=f'{folder_name}data.npy', arr=data)
+    print(
+        f'Byl vytvořen folder s názvem {folder_name[0:-1]}. Data mají {data.shape[0]} snímků a {round(real_fps, 3)} FPS.')
 
-# spouštění funkce update - samotný běh loopu
-timer = QtCore.QTimer()
-timer.timeout.connect(update)
-timer.start(frame_time)
+    # uložení timestampu
+    print('Ukládání timestampů - timestamps.csv')
+    with open(f'{folder_name}timestamps.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(casy)
 
-# spuštění celýho Qt molochu
-app.exec()
+    # uložení thumbnailu
+    print('Ukládání thumbnailu - thumb.png')
+    cv.imwrite(f"{folder_name}thumb.png", thumbnail)
 
-timer.stop()
-camera.release_camera()  # Release the camera
-# ------------------------
-# ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
-# --------------------------
-print('Probíhá ukládání dat')
-# data dostavam z funkce jako list of 3D arrays (512,640) a dělám z toho (N, 512,640) uint16
-data = np.stack(data, axis=0, dtype='uint16')
+    # uložení matlabu
+    print('Ukládání matlabových dat - .mat')
+    savemat(f'{folder_name}{folder_name[0:-1]}.mat', {'data': data})
 
-folder_name, real_fps = create_filename_and_fps(casy[0], casy[-1], data.shape[0])
-# vytvoření folderu s názvem čas měření, FPS
-makedirs(folder_name[0:-1], exist_ok=True)
+    # vyslání příkazu na NUC shutter
+    camera.send_command('NUC - Shutter')
+    camera.send_command('Factory defaults')
 
-# uložení dat
-print('Ukládání dat - data.npy')
-np.save(file=f'{folder_name}data.npy', arr=data)
-print(f'Byl vytvořen folder s názvem {folder_name[0:-1]}. Data mají {data.shape[0]} snímků a {round(real_fps, 3)} FPS.')
+    # definice proměnné frequency_index, který spustí výpočet FPS
+    frequency_index = calculate_fft(data, real_fps, lights_frequency, folder_name)
+    print('Měření ukončeno.')
 
-# uložení timestampu
-print('Ukládání timestampů - timestamps.csv')
-with open(f'{folder_name}timestamps.csv', 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerow(casy)
-
-# uložení thumbnailu
-print('Ukládání thumbnailu - thumb.png')
-cv.imwrite(f"{folder_name}thumb.png", thumbnail)
-
-# uložení matlabu
-print('Ukládání matlabových dat - .mat')
-savemat(f'{folder_name}{folder_name[0:-1]}.mat', {'data': data})
-
-# vyslání příkazu na NUC shutter
-camera.send_command('NUC - Shutter')
-camera.send_command('Factory defaults')
-
-# definice proměnné frequency_index, který spustí výpočet FPS
-frequency_index = calculate_fft(data, real_fps, lights_frequency, folder_name)
-print('Měření ukončeno.')
-
-# uložení props
-print('Ukládání souboru s parametry měření - props.csv')
-write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index)
+    # uložení props
+    print('Ukládání souboru s parametry měření - props.csv')
+    write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index)
