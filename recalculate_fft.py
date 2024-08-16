@@ -1,11 +1,8 @@
 import sys
-
 import numpy as np
 from main import calculate_fft
 import csv
 import platform
-
-
 
 def update_csv_value(file_path, new_value, target_key="Index FFT pro danou frekvenci světel"):
     # Read the CSV file into memory
