@@ -7,6 +7,6 @@
 `recalculate_fft.py` - skript, který znovu vypočte fft z naměřených dat pro zadanou frekvenci ohřevu\
     - použije se v případě, že se do hlavního skriptu chybně zadá frekvence oheřvu
 
-dále je potřeba lokálně uložený `commands.py` a `device.txt`
+dále je potřeba lokálně uložený `commands.py` a `device_defaults.csv`
 
 Have fun!
