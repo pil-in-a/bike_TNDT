@@ -4,7 +4,7 @@ from main import calculate_fft
 import csv
 import platform
 
-def update_csv_value(file_path, new_value, target_key="Index FFT pro danou frekvenci světel"):
+def update_csv_value(file_path, new_value, target_key):
     # Read the CSV file into memory
     with open(file_path, mode='r', newline='') as infile:
         reader = csv.reader(infile)
@@ -70,4 +70,5 @@ real_fps = float(props_dict['Realná FPS'])
 frequency_index = calculate_fft(data=data, frequency=frequency, folder_path=folder, fps=real_fps)
 
 # zápis FFT indexu do props.csv
-update_csv_value(file_path=props_path, new_value=frequency_index)
+update_csv_value(file_path=props_path, target_key="Index FFT pro danou frekvenci světel", new_value=frequency_index)
+update_csv_value(props_path, target_key='Frekvence světel', new_value=frequency)
