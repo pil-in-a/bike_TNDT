@@ -9,9 +9,10 @@ from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMainWindow
 from commands import iray_commands as i_c  # dictionary s hex příkazama
-import math
+import math  # používání math.floor()
 from scipy.io import savemat  # pro ukládání matláku
-import platform
+import platform  # pro nastavování platform specific podmínek
+import sys  # programové ukončení skriptu funkcí sys.exit()
 # další dependency zde je PyQt6 - pip install pyqt6 (pro linux)
 
 # TODO: PySide místo PyQT6?
@@ -74,7 +75,7 @@ def calculate_fft(data, fps, frequency, folder_path):
     rows = data.shape[1]
     cols = data.shape[2]
     frames = data.shape[0]
-    fps = round(fps)
+    fps = round(fps,1)
     # TODO: pokud zaokrouhluje moc, vzniká velká nepřesnost a obraz na frequency_index nebude vypovídající -> nějak
     #  vyhezkat
 
@@ -95,7 +96,7 @@ def calculate_fft(data, fps, frequency, folder_path):
     angle_image = np.zeros((fft_window, cols, rows), dtype='float')
     for x in range(cols):
         for y in range(rows):
-            fft_data = np.fft.fft(data[:fft_window, y, x])
+            fft_data = np.fft.fft(data[-fft_window:, y, x])  # beru okno od konce - ustálenější data
             angle_image[:, x, y] = np.angle(fft_data)
 
     angle_image = angle_image[0:20, :, :]
@@ -184,11 +185,14 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequenc
         writer = csv.writer(f)
         writer.writerows(props_data)
 
-def read_device_txt():
+def read_device_and_defaults_csv():
     """
     Funkce čte soubor device.txt a vrací hodnoty potřebné pro inicializaci kamery. \n
     soubor device.txt vypadá např: \n
-        Device index 2 , serial port 0
+        Device index,2
+        serial port,0
+        default fps,10
+        default heat freq,p10
 
     Pro Linux:
         Device index - /dev/video*X* termokamery \n
@@ -197,27 +201,41 @@ def read_device_txt():
         Device index - prostě index kamery - nejčastějc 0, pokud není integrovaná kamera \n
         serial port - COM*X* \n
 
-    :return: Tuple obsahující index kamery a číslo seriového portu.
-    :rtype: tuple (int, int)
+    :return: Dictionary s hodnotami pro skript.
+    :rtype: dict
     """
-    with open('device.txt', 'r') as file:
-        data = file.read()
-        device_index, port = [int(s) for s in data.split() if s.isdigit()]
-        # rozseká string a když je to číslo, tak si to zapíše
-    return device_index, port
+    device_defaults_dict = {}
+    try:
+        with open('device_default.csv', mode='r') as file:
+            csv_reader = csv.reader(file)
+            for row in csv_reader:
+                key = row[0]
+                value = row[1]
+                device_defaults_dict[key] = value
+    except FileNotFoundError:
+        print(f"nemám device_default.csv")
+        sys.exit()
+    return device_defaults_dict
 
 if __name__ == "__main__":
     # KONSTANTY
-    device_index, port = read_device_txt()
+    device_default_dict = read_device_and_defaults_csv()
+
+    device_index = int(device_default_dict['Device index'])
+    port = int(device_default_dict['serial port'])
+    default_fps = str(device_default_dict['default fps'])
+    default_freq = str(device_default_dict['default freq'])
+
     cols, rows = 640, 512  # velikost snimku
-    set_fps = int(input('Zadej FPS pro snímání [1/s] (Enter pro default = 10):   ') or '10')  # nastaveni fps pro zaznam
+    # nastaveni fps pro zaznam
+    set_fps = int(input(f"Zadej FPS pro snímání [1/s] (Enter pro default = {default_fps}):   ") or default_fps)
     # zadani frekvence svetel pro následný výpočet FFT
     # TODO: error handling - while loop
     print("""Pro jako frekvenci nebo periodu ohřevu bude počítána FFT?
     zadej např 0.1, 0.083, ... pro frekvenci v Hz
     nebo p10, p12, ... pro periodu v sekundách
     """)
-    lights_frequency = (input('(default = 0.1Hz):    ') or '0.1')
+    lights_frequency = (input(f'(default = {default_freq}):    ') or default_freq)
 
     if 'p' in lights_frequency:
         lights_frequency = 1 / float(lights_frequency[1:])
