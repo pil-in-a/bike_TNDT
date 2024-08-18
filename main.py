@@ -169,7 +169,7 @@ def pre_measure_view(device, resize_factor=1.9):
     cv.destroyAllWindows()
 
 
-def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index):
+def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index, notes):
     # funkce zapisující vybrané parametry do props.csv
     props_filename = f'{folder_name}props.csv'
 
@@ -178,7 +178,8 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequenc
         ['Nastavená FPS', set_fps],
         ['Frekvence světel', lights_frequency],
         ['Tvar dat', data.shape],
-        ['Index FFT pro danou frekvenci světel', frequency_index]
+        ['Index FFT pro danou frekvenci světel', frequency_index],
+        ['Poznámky', notes]
     ]
 
     with open(props_filename, 'w', newline='') as f:
@@ -384,6 +385,9 @@ if __name__ == "__main__":
     frequency_index = calculate_fft(data, real_fps, lights_frequency, folder_name)
     print('Měření ukončeno.')
 
+    # Zápis poznámek
+    notes = input('Nějaké poznámky? (Enter -> Default = nic):    ') or ' '
+
     # uložení props
     print('Ukládání souboru s parametry měření - props.csv')
-    write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index)
+    write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index, notes)
