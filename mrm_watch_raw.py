@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.7.19"
+__generated_with = "0.7.20"
 app = marimo.App(width="full")
 
 
@@ -24,12 +24,13 @@ def __(__file__, os):
     # Iterate through all entries in the script's directory
     for entry in os.listdir(script_location):
         full_path = os.path.join(script_location, entry)
-    # Check if the entry is a directory
-        if os.path.isdir(full_path) and not (('.') in entry):
+        props_path = os.path.join(full_path, 'props.csv')
+        # Check if the entry is a directory
+        if os.path.isdir(full_path) and os.path.exists(props_path):
             folder_list.append(entry)
 
     folder_list.sort()
-    return entry, folder_list, full_path, script_location
+    return entry, folder_list, full_path, props_path, script_location
 
 
 @app.cell
@@ -118,7 +119,6 @@ def __(mo, props_dict):
 
     tabulenka = mo.ui.table(data=[props_dict])
     tabulenka
-
     return tabulenka,
 
 
