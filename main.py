@@ -175,7 +175,7 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequenc
 
     props_data = [
         ['Realna FPS', real_fps],
-        ['Nastavená FPS', set_fps],
+        ['Nastavena FPS', set_fps],
         ['Frekvence svetel', lights_frequency],
         ['Tvar dat', data.shape],
         ['Index FFT pro danou frekvenci svetel', frequency_index],
