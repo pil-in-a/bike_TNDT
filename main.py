@@ -386,7 +386,9 @@ if __name__ == "__main__":
     print('Měření ukončeno.')
 
     # Zápis poznámek
-    notes = input('Nějaké poznámky? (Enter -> Default = nic):    ') or ' '
+    print('Nějaké poznámky? Poznámky psát bez háčků a čárek!')
+    notes = input('(Enter -> Default = nic):    ') or ' '
+    # TODO: unidecode pro převedení utf8 na ascii
 
     # uložení props
     print('Ukládání souboru s parametry měření - props.csv')
