@@ -10,3 +10,5 @@
 dále je potřeba lokálně uložený `commands.py` a `device_defaults.csv`
 
 Have fun!
+
+tady udělám něco jinýho
