@@ -174,12 +174,12 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequenc
     props_filename = f'{folder_name}props.csv'
 
     props_data = [
-        ['Realná FPS', real_fps],
+        ['Realna FPS', real_fps],
         ['Nastavená FPS', set_fps],
-        ['Frekvence světel', lights_frequency],
+        ['Frekvence svetel', lights_frequency],
         ['Tvar dat', data.shape],
-        ['Index FFT pro danou frekvenci světel', frequency_index],
-        ['Poznámky', notes]
+        ['Index FFT pro danou frekvenci svetel', frequency_index],
+        ['Poznamky', notes]
     ]
 
     with open(props_filename, 'w', newline='') as f:
