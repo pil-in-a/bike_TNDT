@@ -63,7 +63,7 @@ def __(csv, folder):
             value = row[1]
             props_dict[key] = value
 
-    freq_index = int(props_dict['Index FFT pro danou frekvenci světel'])
+    freq_index = int(props_dict['Index FFT pro danou frekvenci svetel'])
     return csv_reader, file, freq_index, key, props_dict, row, value
 
 
