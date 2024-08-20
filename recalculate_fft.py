@@ -64,11 +64,11 @@ except FileNotFoundError:
 
 
 # přečtení realné FPS z props.csv
-real_fps = float(props_dict['Realná FPS'])
+real_fps = float(props_dict['Realna FPS'])
 
 # přepočet FFT
 frequency_index = calculate_fft(data=data, frequency=frequency, folder_path=folder, fps=real_fps)
 
 # zápis FFT indexu do props.csv
-update_csv_value(file_path=props_path, target_key="Index FFT pro danou frekvenci světel", new_value=frequency_index)
-update_csv_value(props_path, target_key='Frekvence světel', new_value=frequency)
+update_csv_value(file_path=props_path, target_key="Index FFT pro danou frekvenci svetel", new_value=frequency_index)
+update_csv_value(props_path, target_key='Frekvence svetel', new_value=frequency)
