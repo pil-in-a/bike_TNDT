@@ -15,10 +15,11 @@ import platform  # pro nastavování platform specific podmínek
 import sys  # programové ukončení skriptu funkcí sys.exit()
 # další dependency zde je PyQt6 - pip install pyqt6 (pro linux)
 
-# TODO: PySide místo PyQT6?
+# TODO: PySide místo PyQT6? + správné použití + preview s crosshairem v Qt
 # TODO: komprese dat - používám uint16 pro data s rozsahem kolem 2000
-# TODO: Pyqtgraph pro zobrazení preview i s crosshairem
-# TODO: správné používání PyQT
+# TODO: Ovládání světel - zadefinovat Class lights s posíláním příkazů
+# TODO: FPS ve widlích - konsistentní snímkování?
+
 
 # -----------------
 # DEFINICE FUNKCÍ A CLASSŮ
@@ -154,6 +155,10 @@ def pre_measure_view(device, resize_factor=1.9):
     cv.namedWindow('live-view - zmackni Q pro pokracovani', cv.WINDOW_NORMAL)
     cv.resizeWindow('live-view - zmackni Q pro pokracovani', 1200, 1000)
 
+    # == SVĚTLA - start preheat ==
+    # lights.preheat_start(P_preheat)
+    # ============================
+
     while True:
         pohoda, frame_live = device.read_frame()
         if not pohoda:
@@ -167,7 +172,9 @@ def pre_measure_view(device, resize_factor=1.9):
             break
 
     cv.destroyAllWindows()
-
+    # == SVĚTLA - stop preheat ==
+    # lights.preheat_stop()
+    # ===========================
 
 def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index, notes):
     # funkce zapisující vybrané parametry do props.csv
@@ -223,9 +230,12 @@ if __name__ == "__main__":
     device_default_dict = read_device_and_defaults_csv()
 
     device_index = int(device_default_dict['Device index'])
+    # světla: přejmenovat na camera_device_index
     port = int(device_default_dict['serial port'])
+    # světla: přejmenovat na port_camera a přidat port_dimmer, přidat default
     default_fps = str(device_default_dict['default fps'])
     default_freq = str(device_default_dict['default freq'])
+    # světla: přidat P_min, P_max, P_preheat a preheat_boolean do defaults a tady si je iniciovat
 
     cols, rows = 640, 512  # velikost snimku
     # nastaveni fps pro zaznam
@@ -259,10 +269,22 @@ if __name__ == "__main__":
     camera.send_command('PLT - Lava')
     camera.send_command('IF - off')
     camera.send_command('IF - horizontal')
+
+    # == SVĚTLA - set =====
+    # iniciovat instanci lights
+    # poslat command do stmívače lights.set(lights_frequency, P_min, P_max)
+    # =====================
+
     # -----------------
     # LIVE VIEW
     # ------------------
     pre_measure_view(camera, resize_factor=1.9)
+
+    # == SVĚTLA - preheat =====
+    # příkaz lights.preheat_start(P_preheat) a lights.preheat_stop() pošlu z funkce pre_measure_view,
+    # když bude preheat_boolean True
+    # =========================
+
     # po zaostření a před záznamem (tam už mám nastavenou úpravu RAW formátu na Y16)
     thumbnail = create_thumbnail(camera)
     # -------------------
@@ -331,6 +353,9 @@ if __name__ == "__main__":
         data.append(frame)
         casy.append(time.time())
 
+    # == SVĚTLA - start ==
+    # pošlu příkaz lights.start()
+    # ====================
 
     # Shutter před náběrem
     camera.send_command('DVI - LVCMOS')
@@ -346,6 +371,11 @@ if __name__ == "__main__":
     app.exec()
     timer.stop()
     camera.release_camera()  # Release the camera
+
+    # == SVĚTLA - stop ==
+    # pošlu příkaz lights.stop()
+    # ====================
+
     # ------------------------
     # ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
     # --------------------------
