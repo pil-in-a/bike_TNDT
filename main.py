@@ -56,6 +56,49 @@ class Camera:
     def release_camera(self):
         self.device.release()
 
+class Lights:
+    # třída Lights, která iniciuje arduino na daném seriovém portu a posílá do něj příkazy
+    # funkce skládají správné stringy a posílají je do arduina
+    def __init__(self, port, baud_rate=9600):
+        try:
+            self.serial_device = serial.Serial(port, baudrate=baud_rate, timeout=1)
+            print(f"Connected to {port} at {baud_rate} baud")
+        except Exception as e:
+            print(f"Failed to connect to {port}: {e}")
+            self.serial_device = None
+
+    def preheat(self, power_preheat):
+        command = f"PREHEAT={power_preheat}\n"
+        if self.serial_device and self.serial_device.is_open:
+            self.serial_device.write(command.encode())
+        else:
+            print("Serial device not connected.")
+
+    def set_heating(self, period, power_min, power_max):
+        command = f"SET={vykon_preheat},{power_min},{power_max}\n"
+        if self.serial_device and self.serial_device.is_open:
+            self.serial_device.write(command.encode())
+        else:
+            print("Serial device not connected.")
+
+    def start_heating(self, cycle_count):
+        command = f"START={cycle_count}\n"
+        if self.serial_device and self.serial_device.is_open:
+            self.serial_device.write(command.encode())
+        else:
+            print("Serial device not connected.")
+
+    def stop_heating(self):
+        command = f"STOP\n"
+        if self.serial_device and self.serial_device.is_open:
+            self.serial_device.write(command.encode())
+        else:
+            print("Serial device not connected.")
+
+    def close(self):
+        if self.serial_device and self.serial_device.is_open:
+            self.serial_device.close()
+            print("Serial device closed.")
 
 def calculate_fft(data, fps, frequency, folder_path):
     """
@@ -150,14 +193,12 @@ def create_filename_and_fps(start, stop, n):
     return filename, fps
 
 
-def pre_measure_view(device, resize_factor=1.9):
+def pre_measure_view(device, lights, power_preheat, resize_factor=1.9):
     # TODO: předělat na PyQt a dát tam ten crosshair
     cv.namedWindow('live-view - zmackni Q pro pokracovani', cv.WINDOW_NORMAL)
     cv.resizeWindow('live-view - zmackni Q pro pokracovani', 1200, 1000)
 
-    # == SVĚTLA - start preheat ==
-    # lights.preheat_start(P_preheat)
-    # ============================
+    lights.preheat(power_preheat)
 
     while True:
         pohoda, frame_live = device.read_frame()
@@ -172,9 +213,6 @@ def pre_measure_view(device, resize_factor=1.9):
             break
 
     cv.destroyAllWindows()
-    # == SVĚTLA - stop preheat ==
-    # lights.preheat_stop()
-    # ===========================
 
 def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index, notes):
     # funkce zapisující vybrané parametry do props.csv
@@ -201,6 +239,10 @@ def read_device_and_defaults_csv():
         serial port,0
         default fps,10
         default heat freq,p10
+        lights serial port,1
+        lights Ppreheat,30
+        lights Pmin,0
+        lights Pmax,100
 
     Pro Linux:
         Device index - /dev/video*X* termokamery \n
@@ -229,13 +271,14 @@ if __name__ == "__main__":
     # KONSTANTY
     device_default_dict = read_device_and_defaults_csv()
 
-    device_index = int(device_default_dict['Device index'])
-    # světla: přejmenovat na camera_device_index
-    port = int(device_default_dict['serial port'])
-    # světla: přejmenovat na port_camera a přidat port_dimmer, přidat default
+    camera_device_index = int(device_default_dict['Device index'])
+    camera_serial_port = int(device_default_dict['serial port'])
     default_fps = str(device_default_dict['default fps'])
     default_freq = str(device_default_dict['default freq'])
-    # světla: přidat P_min, P_max, P_preheat a preheat_boolean do defaults a tady si je iniciovat
+    lights_serial_port = int(device_default_dict['lights serial port'])
+    power_preheat = str(device_default_dict['lights Ppreheat'])
+    power_min = str(device_default_dict['lights Pmin'])
+    power_max = str(device_default_dict['lights Pmax'])
 
     cols, rows = 640, 512  # velikost snimku
     # nastaveni fps pro zaznam
@@ -253,16 +296,22 @@ if __name__ == "__main__":
     else:
         lights_frequency = float(lights_frequency)
 
+    period_lenght_ms = round((1 / lights_frequency) * 1000, 0)
+
     x_watch = 320  # souradnice bodu, kde sleduju hodnotu a je tam křížek
     y_watch = 256
     # definice seriového portu
+    # TODO: je ošklivý, že jednou otevírám port a podruhý jen určuju string portu pro class Lights
+    #   v classu camera bych měl mít i inicaci seriového portu a brát port jako argument
     if platform.system() == 'Windows':
-        ser = serial.Serial(f'COM{port}')  # For Windows
+        ser = serial.Serial(f'COM{camera_serial_port}')  # For Windows
+        lights_port_string = f'COM{lights_serial_port}'
     else:
-        ser = serial.Serial(f'/dev/ttyUSB{port}')  # For Linux
+        ser = serial.Serial(f'/dev/ttyUSB{camera_serial_port}') # For Linux
+        lights_port_string = f'/dev/ttyUSB{lights_serial_port}'
     ser.baudrate = 115200
     # inicializace kamery
-    camera = Camera(ser, device_index)
+    camera = Camera(ser, camera_device_index)
     # OVLADANI KAMERY po serial portu
     # při IF provádí NUC shutter, 2x IF je tam, kdyby byl nějakej špatnej výchozí stav
     camera.send_command('DVI - BT.1120')
@@ -274,11 +323,13 @@ if __name__ == "__main__":
     # iniciovat instanci lights
     # poslat command do stmívače lights.set(lights_frequency, P_min, P_max)
     # =====================
+    lights = Lights(lights_port_string)
+    lights.set_heating(period_lenght_ms, power_min, power_max)
 
     # -----------------
     # LIVE VIEW
     # ------------------
-    pre_measure_view(camera, resize_factor=1.9)
+    pre_measure_view(camera, lights, power_preheat, resize_factor=1.9)
 
     # == SVĚTLA - preheat =====
     # příkaz lights.preheat_start(P_preheat) a lights.preheat_stop() pošlu z funkce pre_measure_view,
@@ -292,13 +343,15 @@ if __name__ == "__main__":
     # ----------------------
     # nová inicializace kamery, protože MSMF měl nějakej problém
     if platform.system() == "Windows":
-        camera = Camera(ser, device_index)
+        camera = Camera(ser, camera_device_index)
     else:
         pass
     # nastavení správného raw formátu
     camera.setup_raw_mode()
     # vypocet intervalu pro QtTimer
     frame_time = 1000 // set_fps  # 1000 ms děleno (// pro integer) fpskama
+
+
     # NASTAVENÍ ZOBRAZOVACÍHO OKNA pyqtgraph a QtMainWindow
     # mainwindow je instance CustomMainWindow, která se dá zavřít klávesou
     app = pg.mkQApp("Záznam - stiskni Q pro ukončení záznamu")
@@ -357,6 +410,9 @@ if __name__ == "__main__":
     # pošlu příkaz lights.start()
     # ====================
 
+    lights.start_heating(40) # 40 period jako default
+    # TODO: definovat počet period programově
+
     # Shutter před náběrem
     camera.send_command('DVI - LVCMOS')
     camera.send_command('DVS - NUC')
@@ -375,7 +431,8 @@ if __name__ == "__main__":
     # == SVĚTLA - stop ==
     # pošlu příkaz lights.stop()
     # ====================
-
+    lights.stop_heating()
+    lights.close()
     # ------------------------
     # ZPRACOVÁNÍ A UKLÁDÁNÍ DAT
     # --------------------------
