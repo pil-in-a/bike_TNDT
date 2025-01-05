@@ -69,13 +69,14 @@ class Lights:
 
     def preheat(self, power_preheat):
         command = f"PREHEAT={power_preheat}\n"
+        # bude to umět preheat 0?
         if self.serial_device and self.serial_device.is_open:
             self.serial_device.write(command.encode())
         else:
             print("Serial device not connected.")
 
     def set_heating(self, period, power_min, power_max):
-        command = f"SET={vykon_preheat},{power_min},{power_max}\n"
+        command = f"SET={period},{power_min},{power_max}\n"
         if self.serial_device and self.serial_device.is_open:
             self.serial_device.write(command.encode())
         else:
@@ -234,7 +235,7 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequenc
 def read_device_and_defaults_csv():
     """
     Funkce čte soubor device.txt a vrací hodnoty potřebné pro inicializaci kamery. \n
-    soubor device.txt vypadá např: \n
+    soubor device_default.csv vypadá např: \n
         Device index,2
         serial port,0
         default fps,10
@@ -279,6 +280,8 @@ if __name__ == "__main__":
     power_preheat = str(device_default_dict['lights Ppreheat'])
     power_min = str(device_default_dict['lights Pmin'])
     power_max = str(device_default_dict['lights Pmax'])
+
+    # TODO: dát možnost navolit Preheat, min a max mimo defaults.
 
     cols, rows = 640, 512  # velikost snimku
     # nastaveni fps pro zaznam
