@@ -1,4 +1,6 @@
 import csv  # kvuli ukladaní timestamp
+import json
+import os
 from os import makedirs  # kvuli vytvoření folderu
 import cv2 as cv  # kvuli kameře - obraz
 import serial  # kvůli posílání hex commandů do kamery
@@ -174,7 +176,8 @@ def create_thumbnail(device):
 def create_filename_and_fps(start, stop, n):
     """
     Funkce vytváří název adresáře pro uložení naměřených dat a dalších souborů.
-    Dále vypořítá reálnou FPS, která je součástí onoho názvu.
+    Dále vypočítá reálnou FPS, která je součástí onoho názvu.
+    Používá os.path.join(), která je OS-agnostic.
 
     :param start: Cas začátku měření vytvořený funkcí time.time()
     :type start: float
@@ -187,10 +190,9 @@ def create_filename_and_fps(start, stop, n):
     """
     fps = n / (stop - start)
     string_fps = str(fps)
-    if platform.system() == 'Windows':
-        filename = f'{time.strftime("%m%d%H%M")}FPS{string_fps[0:2]}' + '\\'
-    else:
-        filename = f'{time.strftime("%m%d%H%M")}FPS{string_fps[0:2]}' + '/'
+    measurements_dir = os.path.join(os.getcwd(), 'measurements')
+    measurement_name = f'{time.strftime("%m%d%H%M")}FPS{string_fps[0:2]}'
+    filename = os.path.join(measurements_dir, measurement_name) + os.sep # vrací cestu i s lomítkem na konci
     return filename, fps
 
 
@@ -231,6 +233,42 @@ def write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequenc
     with open(props_filename, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerows(props_data)
+
+def write_json(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index, notes):
+    """
+    funkce zapisující parametry měření do properties.json
+    :param folder_name:
+    :param real_fps:
+    :param set_fps:
+    :param lights_frequency:
+    :param data:
+    :param frequency_index:
+    :param notes:
+    :return:
+    """
+
+    properties_filename = f'{folder_name}properties.json'
+    data_shape = data.shape
+
+    properties_data = {
+            "ID": folder_name,
+            "Name": "TBD",  # Placeholder for Name
+            "date_and_time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "lights_frequency": lights_frequency,
+            "lights_frequency_units": "Hz",  # Using 'Hz' as default units for frequency
+            "Real_FPS": real_fps,
+            "Set_FPS": set_fps,
+            "FFT_calculated": True,  # Default to True
+            "crosshair_position": {
+                "x": 320,
+                "y": 256
+            },
+            "FFT_index": frequency_index,
+            "data_shape": data_shape,
+            "notes": notes
+        }
+    with open(properties_filename, 'w') as f:
+        json.dump(properties_data, f, indent=4)
 
 def read_device_and_defaults_csv():
     """
@@ -483,3 +521,7 @@ if __name__ == "__main__":
     # uložení props
     print('Ukládání souboru s parametry měření - props.csv')
     write_props(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index, notes)
+
+    # uložení json
+    print('Ukládání souboru s parametry měření - properties.json')
+    write_json(folder_name, real_fps, set_fps, lights_frequency, data, frequency_index, notes)
